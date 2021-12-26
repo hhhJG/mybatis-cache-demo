@@ -53,13 +53,18 @@ public class StudentMapperTest {
      */
     @Test
     public void testLocalCacheClear() throws Exception {
-        SqlSession sqlSession = factory.openSession(true); // 自动提交事务
+        SqlSession sqlSession = factory.openSession(false); // 自动提交事务
         StudentMapper studentMapper = sqlSession.getMapper(StudentMapper.class);
 
         System.out.println(studentMapper.getStudentById(1));
+        System.out.println();
+        // insert/update/delete时，clearOnCommit 设置为 true，并且 BaseExecutor.update(xxx) 调用 clearLocalCache 清空本地缓存
         System.out.println("增加了" + studentMapper.addStudent(buildStudent()) + "个学生");
+        System.out.println();
+        // 综合 clearOnCommit = true 及 本地缓存清空，所以再次查询时需要查库
         System.out.println(studentMapper.getStudentById(1));
-
+        // 若自动提交为 false，在 addStudent【DefaultSqlSession.update(xxx) 将 dirty = true】
+        // 则 close() 时会进行回滚
         sqlSession.close();
     }
 
@@ -79,6 +84,7 @@ public class StudentMapperTest {
         System.out.println("studentMapper读取数据: " + studentMapper.getStudentById(1));
         System.out.println("studentMapper读取数据: " + studentMapper.getStudentById(1));
         System.out.println("studentMapper2更新了" + studentMapper2.updateStudentName("小岑",1) + "个学生的数据");
+        // 读到脏数据
         System.out.println("studentMapper读取数据: " + studentMapper.getStudentById(1));
         System.out.println("studentMapper2读取数据: " + studentMapper2.getStudentById(1));
 
@@ -95,6 +101,7 @@ public class StudentMapperTest {
     /**
      *  <setting name="localCacheScope" value="SESSION"/>
      *  <setting name="cacheEnabled" value="true"/>
+     *  未命中缓存。SqlSession 间数据隔离
      * @throws Exception
      */
     @Test
@@ -124,7 +131,12 @@ public class StudentMapperTest {
         StudentMapper studentMapper2 = sqlSession2.getMapper(StudentMapper.class);
 
         System.out.println("studentMapper读取数据: " + studentMapper.getStudentById(1));
+        // autoCommit = true, 所以在 close() 时会自动代刷新实体放入缓存中。
+        // TransactionalCache.flushPendingEntries
         sqlSession1.close();
+        // studentMapper 和 studentMapper2 因 namespace 相同，共用同一个 MappedStatement，其 Cache 相同，除了 TransactionalCache
+        // 每个 Mapper 都会有自己的 CachingExecutor【针对二级缓存而言】，而每个 Executor 都会有自己的 TransactionalCacheManager。
+        // TransactionalCacheManager.getTransactionalCache(xxx)，如果不存在，则会直接 new TransactionalCache
         System.out.println("studentMapper2读取数据: " + studentMapper2.getStudentById(1));
 
     }
@@ -161,7 +173,7 @@ public class StudentMapperTest {
      * @throws Exception
      */
     @Test
-    public void testCacheWithDiffererntNamespace() throws Exception {
+    public void testCacheWithDifferentNamespace() throws Exception {
         SqlSession sqlSession1 = factory.openSession(true); // 自动提交事务
         SqlSession sqlSession2 = factory.openSession(true); // 自动提交事务
         SqlSession sqlSession3 = factory.openSession(true); // 自动提交事务
@@ -189,7 +201,7 @@ public class StudentMapperTest {
      * @throws Exception
      */
     @Test
-    public void testCacheWithDiffererntNamespaceWithCacheRef() throws Exception {
+    public void testCacheWithDifferentNamespaceWithCacheRef() throws Exception {
         SqlSession sqlSession1 = factory.openSession(true); // 自动提交事务
         SqlSession sqlSession2 = factory.openSession(true); // 自动提交事务
         SqlSession sqlSession3 = factory.openSession(true); // 自动提交事务
